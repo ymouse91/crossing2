@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>River Crossing — 8×6 (Virtuaalivaeltaja)</title>
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <style>
+:root{
+  --bg:#0b1021; --ink:#e5e7eb; --muted:#94a3b8;
+  --bank:#0f172a; --water:#0b132a;
+  /* lankut: 2 = keltainen, 3 = violetti, 4+ = vihreä */
+  --plank0:#d1d5db;
+  --plank1:#facc15;
+  --plank2:#c4b5fd;
+  --plank3:#86efac;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;width:100%;margin:0;padding:0;}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,sans-serif;
+  display:grid;grid-template-rows:auto auto 1fr;align-items:start;justify-items:center;
+  gap:clamp(4px, 1.5vh, 12px);
+  padding:clamp(4px, 2vh, 8px) clamp(4px, 2vw, 12px) clamp(4px, 2vh, 12px);
+  padding-top:max(env(safe-area-inset-top), clamp(4px, 2vh, 8px));
+  padding-bottom:max(env(safe-area-inset-bottom), clamp(4px, 2vh, 8px));
+  min-height:100vh;overflow-x:hidden;
+}
+h1{margin:4px 0;font-size:clamp(16px, 5vw, 20px);font-weight:700;}
+.panel{
+  width:min(95vw, 100%);background:#0b1021;border:1px solid #1f2937;border-radius:12px;
+  box-shadow:0 6px 20px #00000055;padding:8px 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;
+}
+.panel .left{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
+.panel .block{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.panel button{
+  appearance:none;border:1px solid #334155;background:#111827;color:var(--ink);
+  padding:6px 8px;border-radius:8px;cursor:pointer;font-size:clamp(12px, 3vw, 14px);font-weight:500;white-space:nowrap;flex-shrink:0;
+}
+.panel button:active{opacity:.7;}
+.panel button:disabled{opacity:.5;cursor:not-allowed;}
+.panel small, .panel label{color:var(--muted);font-size:clamp(11px, 2.5vw, 13px);}
+.panel input[type=range]{width:160px; accent-color:#22d3ee;}
+.wrap{
+  width:min(95vw, 100%);max-width:560px;
+  aspect-ratio: 6 / 8; /* 8×6: leveys 6, korkeus 8 */
+  position:relative; display:flex;align-items:center;justify-content:center;
+}
+svg{
+  width:100%;height:100%;display:block;border-radius:16px;border:1px solid #1f2937;
+  background:#0b1021;
+}
+@media (max-width:480px) {
+  body{gap:6px;padding:max(env(safe-area-inset-top),6px) 6px max(env(safe-area-inset-bottom),6px);}
+  h1{margin:2px 0;}
+  .panel{padding:6px 8px;gap:6px;border-radius:10px;}
+  .panel button{padding:5px 7px;border-radius:7px;}
+}
+@media (min-width:768px) {
+  body{gap:12px;padding:max(env(safe-area-inset-top),14px) 12px max(env(safe-area-inset-bottom),14px);}
+  .panel{width:min(980px,95vw);padding:10px 12px;gap:12px;justify-content:space-between;}
+  .panel .left{justify-content:flex-start;}
+  .wrap{width:min(980px,95vw);}
+}
+@media (orientation:landscape) and (max-height:600px) {
+  body{
+    grid-template-rows:auto auto 1fr;
+    gap:clamp(2px, 1vh, 8px);
+    padding:max(env(safe-area-inset-top), 2px) clamp(4px, 2vw, 12px) max(env(safe-area-inset-bottom), 2px);
+  }
+  h1{margin:0;font-size:clamp(14px, 2.5vh, 18px);}
+  .panel{
+    padding:clamp(4px, 0.8vh, 8px) clamp(6px, 1.5vw, 10px);
+    gap:clamp(4px, 1vw, 8px);
+    width:min(95vw, 100%);
+  }
+  .panel button{padding:clamp(3px, 0.7vh, 6px) clamp(6px, 1vw, 8px);font-size:clamp(11px, 1.8vh, 13px);}
+  .wrap{width:95vw;max-width:none;aspect-ratio: 6 / 8;}
+}
+  </style>
+</head>
+<body>
+  <h1 id="title">River Crossing — 8×6</h1>
+  <div class="panel">
+    <div class="left block">
+      <button id="prev">Edellinen</button>
+      <button id="next">Seuraava</button>
+      <button id="reset">Palauta alku</button>
+      <span id="meta"><small></small></span>
+      <small>Siirrot: <b id="moves">0</b></small>
+    </div>
+    <div class="left block">
+      <button id="solveBtn">Näytä ratkaisu</button>
+      <label for="speed">Nopeus</label>
+      <input id="speed" type="range" min="150" max="2000" step="50" value="700" />
+      <small id="speedVal">700 ms</small>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <svg id="board" viewBox="0 0 560 768" xmlns="http://www.w3.org/2000/svg" aria-label="pelilauta"></svg>
+  </div>
+
+<script>
+/* ===== Manifest + SW ===== */
+(function(){
+  const manifest = {
+    name: "River Crossing 8×6",
+    short_name: "Crossing",
+    start_url: "./",
+    display: "standalone",
+    icons: [
+      { src: "./icon-192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
+      { src: "./icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = URL.createObjectURL(blob);
+  document.head.appendChild(link);
+
+  if ('serviceWorker' in navigator && !location.href.startsWith('blob:') && !location.href.startsWith('data:')) {
+    const swCode =
+`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('rc8x6-v5').then(c=>c.addAll(['./','./puzzles_8x6.json'])))});
+self.addEventListener('activate',e=>self.clients.claim());
+self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))})`;
+    const swBlob = new Blob([swCode], {type:'text/javascript'});
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }
+})();
+</script>
+
+<script>
+/* ===== Perus ===== */
+const CELL=64, W=6, H=6;  // leveys 6, vesirivejä 6 (8-2)
+const board=document.getElementById('board');
+const metaEl=document.getElementById('meta').firstElementChild;
+const movesEl=document.getElementById('moves');
+const speedRange=document.getElementById('speed');
+const speedVal=document.getElementById('speedVal');
+let isShowingSolution = false;
+
+const state={
+  start:{side:'bottom', col:0},
+  goal:{side:'top', col:5},
+  stumps:[],           // {x,y} – myös rannalla (y=-1 tai y=H)
+  planks:[],           // {len,x,y,dir:'h'|'v'} – x,y=min-pää
+  who:null,            // vaeltaja, kun EI kanneta (label)
+  carrying:0,          // 0 = ei lankkua kädessä
+  carryAnchors:null,   // { labels:Set<label>, points:[{x,y}, {x,y}?] } kun kannetaan
+  pendingHead:null,    // 2-klikkaustilan ensimmäinen pää
+  moves:0, frozen:false, _snapshot:null, _meta:''
+};
+
+speedRange.addEventListener('input', ()=> speedVal.textContent = speedRange.value +' ms');
+speedVal.textContent = speedRange.value +' ms';
+
+/* ===== Utilit ===== */
+function svg(tag,attrs={}){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function rect(x,y,w,h,a={}){return svg('rect',Object.assign({x,y,width:w,height:h},a));}
+function line(x1,y1,x2,y2,a={}){return svg('line',Object.assign({x1,y1,x2,y2},a));}
+function circle(cx,cy,r,a={}){return svg('circle',Object.assign({cx,cy,r},a));}
+
+function labelFromXY(x,y){
+  if(y===-1) return String(x);       // yläranta 0..5
+  if(y===H)  return String(6 + x);   // alaranta 6..11
+  // vesialue kirjaimilla
+  let n = y*W + x, s='';
+  while(true){ s=String.fromCharCode(65+(n%26))+s; n=Math.floor(n/26)-1; if(n<0) break; }
+  return s;
+}
+function stumpAt(x,y){
+  if(state.stumps.some(s=>s.x===x && s.y===y)) return true;
+  const sy = state.start.side==='top' ? -1 : H;
+  if(x===state.start.col && y===sy) return true;
+  const gy = state.goal.side==='top' ? -1 : H;
+  if(x===state.goal.col && y===gy) return true;
+  return false;
+}
+function plankEndpoints(p){
+  const dx=p.dir==='h'?1:0, dy=p.dir==='v'?1:0;
+  return [{x:p.x,y:p.y},{x:p.x+dx*p.len,y:p.y+dy*p.len}];
+}
+
+/* ===== Graafi ===== */
+function buildAdj(planks){
+  const adj=new Map();
+  function add(u,v){ if(!adj.has(u)) adj.set(u,[]); adj.get(u).push(v); }
+  for(const p of planks){
+    const [a,b]=plankEndpoints(p);
+    const A=labelFromXY(a.x,a.y), B=labelFromXY(b.x,b.y);
+    add(A,B); add(B,A);
+  }
+  return adj;
+}
+function reachableFromLabel(lbl, planks){
+  const adj=buildAdj(planks), seen=new Set();
+  if(!lbl) return seen;
+  const q=[lbl]; seen.add(lbl);
+  while(q.length){
+    const x=q.shift();
+    for(const y of (adj.get(x)||[])) if(!seen.has(y)){ seen.add(y); q.push(y); }
+  }
+  return seen;
+}
+function reachUnionWhileCarrying(rest){
+  if(!(state.carrying && state.carryAnchors)) return reachableFromLabel(state.who, rest);
+  const U = new Set();
+  for(const lbl of state.carryAnchors.labels){
+    const R = reachableFromLabel(lbl, rest);
+    for(const v of R) U.add(v);
+  }
+  return U;
+}
+
+function setNavDisabled(disabled){
+  document.getElementById('prev').disabled   = disabled;
+  document.getElementById('next').disabled   = disabled;
+  document.getElementById('reset').disabled  = disabled;
+}
+
+
+/* ===== Validoinnit ===== */
+function segmentsOverlap(a1,a2,b1,b2){
+  const L=Math.max(Math.min(a1,a2),Math.min(b1,b2));
+  const R=Math.min(Math.max(a1,a2),Math.max(b1,b2));
+  return (R-L)>0;
+}
+function crossesExisting(newP, list=state.planks){
+  const [na,nb]=plankEndpoints(newP);
+  for(const q of list){
+    const [qa,qb]=plankEndpoints(q);
+    if(newP.dir!==q.dir){
+      const h=newP.dir==='h'?newP:q, v=newP.dir==='v'?newP:q;
+      const [ha,hb]=plankEndpoints(h), [va,vb]=plankEndpoints(v);
+      const x=va.x, y=ha.y;
+      const onX = x>Math.min(ha.x,hb.x) && x<Math.max(ha.x,hb.x);
+      const onY = y>Math.min(va.y,vb.y) && y<Math.max(va.y,vb.y);
+      if(onX&&onY) return true;
+    }else{
+      if(newP.dir==='h' && qa.y===na.y && segmentsOverlap(na.x,nb.x,qa.x,qb.x)) return true;
+      if(newP.dir==='v' && qa.x===na.x && segmentsOverlap(na.y,nb.y,qa.y,qb.y)) return true;
+    }
+  }
+  return false;
+}
+function lineClearBetween(sx,sy, tx,ty){
+  const stepX = Math.sign(tx-sx), stepY = Math.sign(ty-sy);
+  let x=sx+stepX, y=sy+stepY;
+  while(!(x===tx && y===ty)){
+    if(stumpAt(x,y)) return false;
+    x+=stepX; y+=stepY;
+  }
+  return true;
+}
+function canPlacePlank(len, sx,sy, tx,ty, useList=state.planks){
+  const dx=tx-sx, dy=ty-sy;
+  if(dx!==0 && dy!==0) return false;
+  if(Math.abs(dx)+Math.abs(dy)!==len) return false;
+
+  // rantasääntö
+  const aBank=(sy===-1||sy===H), bBank=(ty===-1||ty===H);
+  if(aBank||bBank){
+    if(sx!==tx) return false;      // rannalta vain pysty
+    if(aBank&&bBank) return false; // ei ranta↔ranta
+  }
+
+  if(!lineClearBetween(sx,sy,tx,ty)) return false;
+  const newP={len,x:Math.min(sx,tx),y:Math.min(sy,ty),dir:(dy===0?'h':'v')};
+  if(crossesExisting(newP, useList)) return false;
+  return true;
+}
+
+/* ===== Render ===== */
+function render(){
+  const pad=24, width=W*CELL+pad*2, height=(H+2)*CELL+pad*2;
+  board.setAttribute('viewBox',`0 0 ${width} ${height}`);
+  board.innerHTML='';
+
+  // taustat
+  const gBg=svg('g');
+  gBg.appendChild(rect(pad, pad+CELL, W*CELL, H*CELL, {fill:'var(--water)', rx:16}));
+  gBg.appendChild(rect(pad, pad, W*CELL, CELL, {fill:'var(--bank)', rx:12}));
+  gBg.appendChild(rect(pad, pad+CELL*(H+1), W*CELL, CELL, {fill:'var(--bank)', rx:12}));
+  board.appendChild(gBg);
+
+  // ruudukko
+  const grid=svg('g',{stroke:'#1f2937','stroke-width':2});
+  for(let x=0;x<=W;x++) grid.appendChild(line(pad+x*CELL, pad+CELL, pad+x*CELL, pad+CELL*(H+1)));
+  for(let y=1;y<=H+1;y++) grid.appendChild(line(pad, pad+y*CELL, pad+W*CELL, pad+y*CELL));
+  board.appendChild(grid);
+
+  // Lankut
+  const gPlank = svg('g', { 'stroke':'#00000022', 'stroke-width': 1 });
+  for(const p of state.planks){
+    const [a,b]=plankEndpoints(p);
+    const x1=pad+a.x*CELL+CELL/2, y1=pad+(a.y+1)*CELL+CELL/2;
+    const x2=pad+b.x*CELL+CELL/2, y2=pad+(b.y+1)*CELL+CELL/2;
+    const len=Math.hypot(x2-x1,y2-y1), ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI;
+    const g=svg('g',{transform:`translate(${x1} ${y1}) rotate(${ang})`});
+const fill =
+  (p.len===1) ? 'var(--plank0)' :
+  (p.len===2) ? 'var(--plank1)' :
+  (p.len===3) ? 'var(--plank2)' :
+                'var(--plank3)';
+
+    g.appendChild(svg('rect',{x:0,y:-10,width:len,height:20,fill,rx:10,opacity:.95,filter:'saturate(1.05)'}));
+    g.appendChild(circle(0,0,6,{ fill:'#00000033' }));
+    g.appendChild(circle(len,0,6,{ fill:'#00000033' }));
+    g.style.cursor='pointer';
+    g.addEventListener('click',()=>onPlankClick(p));
+    gPlank.appendChild(g);
+  }
+  board.appendChild(gPlank);
+
+  // Start/Goal
+  const gMarks=svg('g');
+  const startX=pad+state.start.col*CELL+CELL/2;
+  const startY=(state.start.side==='top')? (pad+CELL/2):(pad+(H+1.5)*CELL);
+  const goalX =pad+state.goal.col*CELL+CELL/2;
+  const goalY =(state.goal.side==='top')? (pad+CELL/2):(pad+(H+1.5)*CELL);
+
+  const sDot=circle(startX,startY,10,{fill:'#111827',stroke:'#16a34a','stroke-width':3});
+  gMarks.appendChild(sDot);
+
+  const gDot=circle(goalX,goalY,10,{fill:'#111827',stroke:'#dc2626','stroke-width':3});
+  gMarks.appendChild(gDot);
+
+  board.appendChild(gMarks);
+
+  // Tolpat (+ start/goal klikkihitbox)
+  const gSt=svg('g');
+  for(const s of state.stumps){
+    const cx=pad+s.x*CELL+CELL/2, cy=pad+(s.y+1)*CELL+CELL/2;
+    const dot=circle(cx,cy,10,{fill:'#111827',stroke:'#e5e7eb','stroke-width':2});
+    dot.style.cursor='pointer';
+    dot.addEventListener('click',()=>onStumpClick(s.x,s.y));
+    gSt.appendChild(dot);
+  }
+  const startYIdx = (state.start.side==='top'?-1:H);
+  const goalYIdx  = (state.goal.side==='top' ?-1:H);
+  const sHit=circle(startX,startY,12,{fill:'#0000'}); sHit.style.cursor='pointer';
+  sHit.addEventListener('click',()=>onStumpClick(state.start.col,startYIdx));
+  const gHit=circle(goalX,goalY,12,{fill:'#0000'}); gHit.style.cursor='pointer';
+  gHit.addEventListener('click',()=>onStumpClick(state.goal.col,goalYIdx));
+  gSt.appendChild(sHit); gSt.appendChild(gHit);
+  board.appendChild(gSt);
+
+  // Hikeria ei piirretä (virtuaalinen)
+  metaEl.textContent=state._meta||'';
+  movesEl.textContent=state.moves;
+}
+
+/* ===== Interaktio: virtuaalivaeltaja ===== */
+// NOSTO: molemmat päät jäävät ankkureiksi
+function onPlankClick(p){
+  if(state.frozen || state.carrying) return;
+
+  const [a,b] = plankEndpoints(p);
+  const A = labelFromXY(a.x,a.y), B = labelFromXY(b.x,b.y);
+  const reachNow = reachableFromLabel(state.who, state.planks);
+
+  if(!(reachNow.has(A) || reachNow.has(B))) return;
+
+  // poista laudalta
+  const idx = state.planks.indexOf(p);
+  if(idx>=0) state.planks.splice(idx,1);
+
+  // tallenna molemmat saavutettavat nostopäät ankkureiksi
+  const labels = new Set();
+  const points = [];
+  if(reachNow.has(A)){ labels.add(A); points.push({x:a.x,y:a.y}); }
+  if(reachNow.has(B)){ labels.add(B); points.push({x:b.x,y:b.y}); }
+
+  state.carrying = p.len;
+  state.carryAnchors = { labels, points };
+  state.pendingHead = null;
+
+  // who ei muutu — kulku tapahtuu union-reachilla
+  render();
+}
+
+/* ===== Yksi klikkaus riittää (exhaustive) ===== */
+function polesAtDistance(x, y, len){
+  const C = [];
+  const cand = [
+    {x:x+len, y}, {x:x-len, y},
+    {x, y:y+len}, {x, y:y-len}
+  ];
+  for(const p of cand){ if (stumpAt(p.x, p.y)) C.push(p); }
+  return C;
+}
+
+function allPolesForSolve(){
+  const P=[];
+  P.push({x:state.start.col, y: state.start.side==='top'?-1:H});
+  P.push({x:state.goal.col,  y: state.goal.side==='top' ?-1:H});
+  const seen=new Set();
+  for(const s of state.stumps){const k=`${s.x},${s.y}`; if(!seen.has(k)){ seen.add(k); P.push({x:s.x,y:s.y}); }}
+  return P;
+}
+
+function autoPlaceEndClick(x, y){
+  if(!state.carrying) return false;
+
+  const rest = state.planks.slice();
+  const reach = reachUnionWhileCarrying(rest);
+  const clicked = {x, y};
+
+  // 1) Klikattu = LOPPUPÄÄ → etsi mikä tahansa reachable lähtöpää
+  const starts = [];
+  const seen = new Set();
+  for (const p of allPolesForSolve()){
+    const lbl = labelFromXY(p.x, p.y);
+    const key = `${p.x},${p.y}`;
+    if (reach.has(lbl) && !seen.has(key)){
+      starts.push({x:p.x, y:p.y});
+      seen.add(key);
+    }
+  }
+  for (const a of starts){
+    if (canPlacePlank(state.carrying, a.x, a.y, clicked.x, clicked.y, rest)){
+      placeFromTo(a, clicked);
+      return true;
+    }
+  }
+
+  // 2) Klikattu = LÄHTÖPÄÄ → sallitut loppupäät etäisyydellä len
+  const clickedLbl = labelFromXY(clicked.x, clicked.y);
+  if (reach.has(clickedLbl)){
+    const ends = polesAtDistance(clicked.x, clicked.y, state.carrying);
+    for (const b of ends){
+      if (canPlacePlank(state.carrying, clicked.x, clicked.y, b.x, b.y, rest)){
+        placeFromTo(clicked, b);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function onStumpClick(x,y){
+  if(state.frozen || !state.carrying) return;
+
+  // yritetään ensin yhden klikkauksen täydellistä tulkintaa
+  if (!state.pendingHead && autoPlaceEndClick(x, y)){
+    state.pendingHead = null;
+    return;
+  }
+
+  // 2-klikkaustuki: valitse lähtöpää jos reachable unionilla
+  if(!state.pendingHead){
+    const rest = state.planks.slice();
+    const reach = reachUnionWhileCarrying(rest);
+    const lbl = labelFromXY(x,y);
+    if (reach.has(lbl)) state.pendingHead = {x,y};
+    return;
+  }else{
+    const a = state.pendingHead;
+    const b = {x,y};
+    const rest = state.planks.slice();
+    if (canPlacePlank(state.carrying, a.x,a.y, b.x,b.y, rest)){
+      placeFromTo(a, b);
+    } else {
+      // fallback: vielä kertaalleen exhaustiivinen tulkinta
+      autoPlaceEndClick(x, y);
+    }
+    state.pendingHead = null;
+  }
+}
+
+/* ===== Sijoitus + who ===== */
+function placeFromTo(a,b){
+  const rest = state.planks.slice(); // graafi ilman uutta palaa
+  const reachCarry = reachUnionWhileCarrying(rest); // union ankkureista
+
+  const newP = { len: state.carrying,
+                 x: Math.min(a.x,b.x), y: Math.min(a.y,b.y),
+                 dir: (a.y===b.y?'h':'v') };
+  state.planks.push(newP);
+  state.moves++;
+
+  const newA = labelFromXY(a.x,a.y), newB = labelFromXY(b.x,b.y);
+  state.who = reachCarry.has(newA) ? newA : newB; // siirrytään siihen päähän, johon oli pääsy
+
+  state.carrying = 0;
+  state.carryAnchors = null;
+  render();
+  checkIfGoalReached();
+}
+
+function reachedGoal(){
+  const goalY = (state.goal.side==='top'?-1:H);
+  const gLbl = labelFromXY(state.goal.col, goalY);
+  return reachableFromLabel(state.who, state.planks).has(gLbl);
+}
+
+function checkIfGoalReached(){
+  if (reachedGoal()) {
+    if (!isShowingSolution) showWinDialog();
+  }
+}
+
+
+function showWinDialog(){
+  document.getElementById('win-dialog').classList.remove('hidden');
+}
+
+/* ===== Solver (BFS) + animaatio ===== */
+function serializeState(planks, who){
+  const keys=planks.map(p=>{
+    const [a,b]=plankEndpoints(p);
+    const A=labelFromXY(a.x,a.y), B=labelFromXY(b.x,b.y);
+    return (A<B)?`${A}|${B}`:`${B}|${A}`;
+  }).sort();
+  return who+'#'+keys.join(',');
+}
+function validSpansOfLength(len, occupiedKeys, otherPlanks){
+  const P=allPolesForSolve(), spans=[];
+  for(let i=0;i<P.length;i++){
+    for(let j=i+1;j<P.length;j++){
+      const a=P[i], b=P[j];
+      const dx=Math.abs(a.x-b.x), dy=Math.abs(a.y-b.y);
+      if(dx && dy) continue;
+      if(dx+dy!==len) continue;
+      const aBank=(a.y===-1||a.y===H), bBank=(b.y===-1||b.y===H);
+      if(aBank||bBank){ if(a.x!==b.x) continue; if(aBank&&bBank) continue; }
+      const A=labelFromXY(a.x,a.y), B=labelFromXY(b.x,b.y);
+      const key=(A<B)?`${A}|${B}`:`${B}|${A}`;
+      if(occupiedKeys && occupiedKeys.has(key)) continue;
+      if(!lineClearBetween(a.x,a.y,b.x,b.y)) continue;
+      const dir=(dy===0)?'h':'v';
+      const cand={len, x:Math.min(a.x,b.x), y:Math.min(a.y,b.y), dir};
+      if(crossesExisting(cand, otherPlanks)) continue;
+      spans.push({a,b,key,txt:(A<B)?A+B:B+A});
+    }
+  }
+  return spans;
+}
+function solveBFS(){
+  const initPlanks = state.planks.map(p=>({len:p.len,x:p.x,y:p.y,dir:p.dir}));
+  const startLbl = labelFromXY(state.start.col, state.start.side==='top'?-1:H);
+  const goalLbl  = labelFromXY(state.goal.col,  state.goal.side==='top' ?-1:H);
+
+  if(reachableFromLabel(startLbl, initPlanks).has(goalLbl)){
+    return {moves:[], depth:0};
+  }
+  const MAX_STATES=200000;
+  const startKey=serializeState(initPlanks, startLbl);
+  const seen=new Set([startKey]);
+  const Q=[{planks:initPlanks, who:startLbl, depth:0}];
+  const parent=new Map();
+
+  while(Q.length){
+    const cur=Q.shift();
+    const curKey=serializeState(cur.planks, cur.who);
+
+    if(reachableFromLabel(cur.who, cur.planks).has(goalLbl)){
+      const seq=[]; let k=curKey;
+      while(k!==startKey){ const p=parent.get(k); if(!p) break; seq.push(p.move); k=p.prev; }
+      seq.reverse();
+      return {moves:seq, depth:seq.length};
+    }
+
+    const occupied = new Set(cur.planks.map(p=>{
+      const [a,b]=plankEndpoints(p);
+      const A=labelFromXY(a.x,a.y), B=labelFromXY(b.x,b.y);
+      return (A<B)?`${A}|${B}`:`${B}|${A}`;
+    }));
+    const reachNow = reachableFromLabel(cur.who, cur.planks);
+
+    for(let i=0;i<cur.planks.length;i++){
+      const p=cur.planks[i];
+      const [a,b]=plankEndpoints(p);
+      const A=labelFromXY(a.x,a.y), B=labelFromXY(b.x,b.y);
+      const pickupEnd = [];
+      if(reachNow.has(A)) pickupEnd.push(A);
+      if(reachNow.has(B)) pickupEnd.push(B);
+      if(pickupEnd.length===0) continue;
+
+      const rest = cur.planks.filter((_,idx)=>idx!==i);
+      const occMinus = new Set(occupied); occMinus.delete((A<B)?`${A}|${B}`:`${B}|${A}`);
+      const candSpans = validSpansOfLength(p.len, occMinus, rest);
+
+      for(const pick of pickupEnd){
+        const reachCarry = reachableFromLabel(pick, rest);
+        for(const cand of candSpans){
+          const newA = labelFromXY(cand.a.x,cand.a.y), newB = labelFromXY(cand.b.x,cand.b.y);
+          if(!reachCarry.has(newA) && !reachCarry.has(newB)) continue;
+
+          const nxt = rest.slice();
+          nxt.splice(i,0,{len:p.len,x:Math.min(cand.a.x,cand.b.x),
+                          y:Math.min(cand.a.y,cand.b.y),
+                          dir:(cand.a.y===cand.b.y?'h':'v')});
+          const nxtWho = reachCarry.has(newA) ? newA : newB;
+          const nxtKey = serializeState(nxt, nxtWho);
+          if(seen.has(nxtKey)) continue;
+          seen.add(nxtKey);
+
+          const moveObj = {
+            from:{ax:a.x,ay:a.y,bx:b.x,by:b.y},
+            to:{ax:cand.a.x,ay:cand.a.y,bx:cand.b.x,by:cand.b.y},
+            len:p.len
+          };
+          parent.set(nxtKey, {prev:curKey, move:moveObj});
+
+          if(reachableFromLabel(nxtWho, nxt).has(goalLbl)){
+            const seq=[moveObj]; let k=curKey;
+            while(k!==startKey){ const pp=parent.get(k); if(!pp) break; seq.push(pp.move); k=pp.prev; }
+            seq.reverse();
+            return {moves:seq, depth:seq.length};
+          }
+
+          if(seen.size<MAX_STATES) Q.push({planks:nxt, who:nxtWho, depth:cur.depth+1});
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/* Animaatio ratkaisusta */
+let playing=false;
+async function playSolution(){
+  if(playing) return;
+  isShowingSolution = true;   // ⬅️ estää dialogin
+  playing = true;
+  state.frozen = true;
+  setNavDisabled(true);   // 🔒 estetään napit ratkaisun ajaksi
+  // reset
+  if(state._snapshot){
+    const snap = JSON.parse(state._snapshot);
+    Object.assign(state, snap);
+    state._snapshot = JSON.stringify(snap);
+    render();
+  }
+  // virtuaalinen who starttiin
+  state.who = labelFromXY(state.start.col, state.start.side==='top'?-1:H);
+
+  const sol = solveBFS();
+  if(!sol){ metaEl.textContent='Ei ratkaisua'; return; }
+  metaEl.textContent = `Ratkaisun pituus: ${sol.depth}`;
+  if(sol.depth===0){ return; }
+
+  playing=true; state.frozen=true;
+  const delay = +speedRange.value;
+
+  for(const mv of sol.moves){
+    // poista vastaava vanha lankku (from)
+    const id = state.planks.findIndex(pl=>{
+      const [a,b]=plankEndpoints(pl);
+      return (a.x===mv.from.ax && a.y===mv.from.ay && b.x===mv.from.bx && b.y===mv.from.by)
+          || (a.x===mv.from.bx && a.y===mv.from.by && b.x===mv.from.ax && b.y===mv.from.ay);
+    });
+    if(id>=0) state.planks.splice(id,1);
+
+    const rest = state.planks.slice();
+    const reachCarry = reachableFromLabel(state.who, rest);
+    const A = labelFromXY(mv.to.ax, mv.to.ay);
+    const B = labelFromXY(mv.to.bx, mv.to.by);
+    const nxtWho = reachCarry.has(A) ? A : B;
+
+    const len = mv.len;
+    const dir = (mv.to.ay===mv.to.by?'h':'v');
+    state.planks.push({len, x:Math.min(mv.to.ax,mv.to.bx), y:Math.min(mv.to.ay,mv.to.by), dir});
+    state.who = nxtWho;
+    state.moves++;
+    render();
+    await new Promise(r=>setTimeout(r, delay));
+  }
+  state.frozen=false; playing=false;
+  state.frozen = false;
+  playing = false;
+  setNavDisabled(false);  // 🔓 vapautetaan napit
+}
+
+/* ===== Puzzles ===== */
+async function loadPuzzlesFromFile(){
+  try{
+    const resp=await fetch('./puzzles_8x6.json');
+    const all=await resp.json();
+    window._PUZZLES=all;
+    let i=+localStorage.getItem('rc8x6_idx')||0;
+    i=Math.max(0,Math.min(all.length-1,i));
+    applyPuzzle(all[i],i,all.length);
+  }catch(e){ console.error(e); state._meta='Puzzles-tiedoston lataus epäonnistui'; render(); }
+}
+function mapEditorToGame(p){
+  if(!(p && p.cols===6 && p.rows===8)) throw new Error('Väärä koko (8×6)');
+  const toXY=(r,c)=> r===0?{x:c,y:-1} : r===7?{x:c,y:H} : {x:c,y:r-1};
+
+  const s=toXY(p.start.r,p.start.c), g=toXY(p.goal.r,p.goal.c);
+  const start={side:(s.y===-1?'top':'bottom'), col:s.x};
+  const goal ={side:(g.y===-1?'top':'bottom'), col:g.x};
+
+  const stumps=[]; const seen=new Set();
+  (p.poles||[]).forEach(({r,c})=>{
+    const {x,y}=toXY(r,c);
+    const k=`${x},${y}`; if(!seen.has(k)){ seen.add(k); stumps.push({x,y}); }
+  });
+
+  const planks=[];
+  (p.planks||[]).forEach(([r1,c1,r2,c2])=>{
+    const a=toXY(r1,c1), b=toXY(r2,c2);
+    const dx=b.x-a.x, dy=b.y-a.y;
+    if(dx!==0 && dy!==0) return;
+    const len=Math.abs(dx)+Math.abs(dy);
+    planks.push({len, x:Math.min(a.x,b.x), y:Math.min(a.y,b.y), dir:(dy===0?'h':'v')});
+  });
+
+  return {start,goal,stumps,planks};
+}
+function applyPuzzle(p,idx,total){
+  const m=mapEditorToGame(p);
+  state.start=m.start; state.goal=m.goal;
+  state.stumps=m.stumps.slice(); state.planks=m.planks.slice();
+  state.carrying=0; state.carryAnchors=null; state.pendingHead=null;
+  state.moves=0; state.frozen=false;
+  state._meta=`Pulma ${idx+1}/${total}`;
+  // virtuaalinen who = start
+  state.who = labelFromXY(state.start.col, state.start.side==='top'?-1:H);
+  state._snapshot=JSON.stringify({
+    start:state.start,goal:state.goal,stumps:state.stumps,planks:state.planks,
+    who:state.who, carrying:0, carryAnchors:null, pendingHead:null, moves:0, _meta:state._meta
+  });
+  render(); localStorage.setItem('rc8x6_idx', idx);
+  setNavDisabled(false);
+}
+
+function hardReset(){
+  // Palauta snapshotista laudankonfiguraatio
+  if(!state._snapshot) return;
+  const snap = JSON.parse(state._snapshot);
+
+  // Palauta pelitila
+  state.start        = snap.start;
+  state.goal         = snap.goal;
+  state.stumps       = snap.stumps.slice();
+  state.planks       = snap.planks.slice();
+  state.who          = snap.who;           // start-label
+  state.moves        = 0;                  // nollaa siirtolaskuri
+  state.pendingHead  = null;
+  state.carrying     = 0;
+  state.carryAnchors = null;
+
+  // Nollaa kontrolliliput
+  state.frozen       = false;
+  playing            = false;
+  isShowingSolution  = false;
+
+  // Päivitä tekstit
+  state._meta        = snap._meta || state._meta;
+
+  // Piirrä
+  render();
+}
+
+
+/* ===== Nav ===== */
+document.getElementById('reset')?.addEventListener('click', ()=>{
+  hardReset();
+});
+
+
+document.getElementById('prev').addEventListener('click',()=>{
+  const all=window._PUZZLES||[]; if(!all.length) return;
+  let i=(+localStorage.getItem('rc8x6_idx')||0)-1; if(i<0) i=all.length-1;
+  applyPuzzle(all[i],i,all.length);
+});
+document.getElementById('next').addEventListener('click',()=>{
+  const all=window._PUZZLES||[]; if(!all.length) return;
+  let i=(+localStorage.getItem('rc8x6_idx')||0)+1; if(i>=all.length) i=0;
+  applyPuzzle(all[i],i,all.length);
+});
+// Ensimmäinen käyttäjän klikkaus laudalle/animaation jälkeen:
+board.addEventListener('pointerdown', ()=>{ isShowingSolution = false; }, { once:true });
+
+document.getElementById('solveBtn').addEventListener('click', playSolution);
+
+/* ===== iPad-asettelukorjaus ===== */
+function fixLandscapeLayout(){
+  const wrap = document.querySelector('.wrap'); if(!wrap) return;
+  const h1 = document.querySelector('h1');
+  const panel = document.querySelector('.panel');
+  const body = document.body;
+  const h1H = h1?.offsetHeight || 0;
+  const pH  = panel?.offsetHeight || 0;
+  const pT  = parseInt(getComputedStyle(body).paddingTop);
+  const pB  = parseInt(getComputedStyle(body).paddingBottom);
+  const gap = parseInt(getComputedStyle(body).gap);
+  const totalReserved = h1H + pH + pT + pB + gap * 2;
+  const availableHeight = window.innerHeight - totalReserved;
+  const maxWidth = wrap.offsetWidth;
+  const ratio = (H+2) / W; // 8×6 → 8/6
+  wrap.style.height = Math.min(availableHeight, maxWidth * ratio) + 'px';
+}
+window.addEventListener('orientationchange', () => setTimeout(fixLandscapeLayout, 100));
+window.addEventListener('resize', fixLandscapeLayout);
+fixLandscapeLayout();
+
+/* ===== init ===== */
+loadPuzzlesFromFile();
+</script>
+
+<!-- Loppudialogi -->
+<div id="win-dialog" class="dialog hidden">
+  <div class="dialog-content">
+    <h2>Onneksi olkoon!</h2>
+    <p>Pääsit maaliin 🎉</p>
+    <button id="close-dialog">OK</button>
+  </div>
+</div>
+
+<style>
+.dialog{
+  position:fixed; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.5);
+  z-index:1000;
+}
+.dialog.hidden{ display:none; }
+.dialog-content{
+  background:#fff; color:#111;
+  padding:24px 32px; border-radius:12px;
+  text-align:center; font-family:-apple-system, sans-serif;
+  max-width:280px;
+}
+.dialog-content h2{ margin-top:0; }
+.dialog-content button{
+  margin-top:12px; padding:8px 20px; border:none;
+  background:#0f172a; color:#fff; border-radius:6px; font-size:16px;
+}
+</style>
+
+<!-- QR-koodi otsikkoon (iPad-kosketus avaa) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<style>
+  #qrOverlay{
+    position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.6);z-index:999;
+  }
+  #qrBox{
+    background:#fff;padding:16px 20px;border-radius:12px;text-align:center;
+    box-shadow:0 0 20px rgba(0,0,0,.4);
+  }
+  #qrBox canvas{width:180px;height:180px;}
+  #qrBox p{margin:8px 0 0;font-size:14px;color:#222;}
+</style>
+<div id="qrOverlay">
+  <div id="qrBox">
+    <canvas id="qr"></canvas>
+    <p>ymouse91.github.io/crossing2/</p>
+  </div>
+</div>
+<script>
+const qr = new QRious({
+  element: document.getElementById('qr'),
+  value: 'https://ymouse91.github.io/crossing2/',
+  size: 180
+});
+const overlay = document.getElementById('qrOverlay');
+const title = document.getElementById('title');
+title.addEventListener('click', ()=>overlay.style.display='flex');
+overlay.addEventListener('click', ()=>overlay.style.display='none');
+
+document.getElementById('close-dialog').onclick = () => document.getElementById('win-dialog').classList.add('hidden');
+</script>
+
+</body>
+</html>
