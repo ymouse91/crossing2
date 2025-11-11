@@ -81,7 +81,7 @@ svg{
   </style>
 </head>
 <body>
-  <h1 id="title">River Crossing — 8×6</h1>
+  <h1 id="title">Crossing — 8×6</h1>
   <div class="panel">
     <div class="left block">
       <button id="prev">Edellinen</button>
@@ -122,7 +122,7 @@ svg{
 
   if ('serviceWorker' in navigator && !location.href.startsWith('blob:') && !location.href.startsWith('data:')) {
     const swCode =
-`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('rc8x6-v5').then(c=>c.addAll(['./','./puzzles_8x6.json'])))});
+`self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open('rc8x6-v6').then(c=>c.addAll(['./','./puzzles_8x6.json'])))});
 self.addEventListener('activate',e=>self.clients.claim());
 self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))})`;
     const swBlob = new Blob([swCode], {type:'text/javascript'});
@@ -713,22 +713,44 @@ function mapEditorToGame(p){
 
   return {start,goal,stumps,planks};
 }
-function applyPuzzle(p,idx,total){
-  const m=mapEditorToGame(p);
-  state.start=m.start; state.goal=m.goal;
-  state.stumps=m.stumps.slice(); state.planks=m.planks.slice();
-  state.carrying=0; state.carryAnchors=null; state.pendingHead=null;
-  state.moves=0; state.frozen=false;
-  state._meta=`Pulma ${idx+1}/${total}`;
+function applyPuzzle(p, idx, total){
+  const m = mapEditorToGame(p);
+  state.start = m.start;
+  state.goal = m.goal;
+  state.stumps = m.stumps.slice();
+  state.planks = m.planks.slice();
+  state.carrying = 0;
+  state.carryAnchors = null;
+  state.pendingHead = null;
+  state.moves = 0;
+  state.frozen = false;
+
+  // Näytetään myös ratkaisuun tarvittavat siirrot, jos tieto on olemassa
+  const req = (p.moves !== undefined) ? ` (${p.moves})` : '';
+  state._meta = `Pulma ${idx + 1}/${total}${req}`;
+
   // virtuaalinen who = start
-  state.who = labelFromXY(state.start.col, state.start.side==='top'?-1:H);
-  state._snapshot=JSON.stringify({
-    start:state.start,goal:state.goal,stumps:state.stumps,planks:state.planks,
-    who:state.who, carrying:0, carryAnchors:null, pendingHead:null, moves:0, _meta:state._meta
+  state.who = labelFromXY(state.start.col, state.start.side === 'top' ? -1 : H);
+
+  state._snapshot = JSON.stringify({
+    start: state.start,
+    goal: state.goal,
+    stumps: state.stumps,
+    planks: state.planks,
+    who: state.who,
+    carrying: 0,
+    carryAnchors: null,
+    pendingHead: null,
+    moves: 0,
+    _meta: state._meta
   });
-  render(); localStorage.setItem('rc8x6_idx', idx);
+
+  render();
+  localStorage.setItem('rc8x6_idx', idx);
   setNavDisabled(false);
 }
+
+
 
 function hardReset(){
   // Palauta snapshotista laudankonfiguraatio
