@@ -726,7 +726,7 @@ function applyPuzzle(p, idx, total){
   state.frozen = false;
 
   // Näytetään myös ratkaisuun tarvittavat siirrot, jos tieto on olemassa
-  const req = (p.moves !== undefined) ? ` (${p.moves})` : '';
+  const req = (p.moves !== undefined) ? ` (min ${p.moves})` : '';
   state._meta = `Pulma ${idx + 1}/${total}${req}`;
 
   // virtuaalinen who = start
